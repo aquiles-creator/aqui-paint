@@ -27,7 +27,7 @@ html, body {
 
 button {
   padding:12px;
-  margin:8px;
+  margin:6px;
   background:#560bad;
   color:white;
   border:none;
@@ -42,8 +42,8 @@ canvas { display:none; background:#111; margin:auto; }
   position:fixed;
   bottom:20px;
   left:20px;
-  width:100px;
-  height:100px;
+  width:110px;
+  height:110px;
   background:rgba(255,255,255,0.1);
   border-radius:50%;
 }
@@ -80,7 +80,13 @@ canvas { display:none; background:#111; margin:auto; }
 <div id="menu">
   <h1>🎨 Paint Arena</h1>
   <p>Monedas: <span id="coins">0</span></p>
+
+  <button onclick="selectCharacter(1)">Duende ⚡</button>
+  <button onclick="selectCharacter(2)">Soldado 🛡️ 🔒</button>
+  <button onclick="selectCharacter(3)">Mago 🔮 🔒</button>
+
   <button onclick="startGame()">Jugar</button>
+  <button onclick="openBox()">Abrir sobre (100 🪙)</button>
 </div>
 
 <!-- FIN -->
@@ -89,7 +95,6 @@ canvas { display:none; background:#111; margin:auto; }
   <button onclick="goMenu()">Volver al menú</button>
 </div>
 
-<!-- HUD -->
 <div id="hud">
   <p id="score"></p>
 </div>
@@ -97,7 +102,6 @@ canvas { display:none; background:#111; margin:auto; }
 <div id="message"></div>
 
 <canvas id="game"></canvas>
-
 <div id="joystick"></div>
 <div id="ability" onclick="useAbility()">⚡</div>
 
@@ -113,6 +117,13 @@ canvas.height = rows*20;
 let coins = parseInt(localStorage.getItem("coins")) || 0;
 document.getElementById("coins").innerText = coins;
 
+// desbloqueados
+let unlocked = JSON.parse(localStorage.getItem("unlocked")) || [1];
+
+// jugador
+let player = {x:10,y:10,vx:0,vy:0,speed:0.15,type:1};
+let bot = {x:5,y:5};
+
 // mapa
 let grid=[];
 for(let i=0;i<cols;i++){
@@ -120,20 +131,33 @@ for(let i=0;i<cols;i++){
   for(let j=0;j<rows;j++) grid[i][j]=0;
 }
 
-// jugador y bot
-let player = {x:10,y:10,speed:0.08};
-let bot = {x:5,y:5};
-
 let time=30;
 let lastTime=Date.now();
 let playing=false;
+let abilityCooldown=0;
 
 // mensaje
-function showMessage(text){
+function showMessage(t){
   let m=document.getElementById("message");
-  m.innerText=text;
+  m.innerText=t;
   m.style.display="block";
   setTimeout(()=>m.style.display="none",2000);
+}
+
+// seleccionar personaje
+function selectCharacter(t){
+  if(!unlocked.includes(t)){
+    showMessage("🔒 Bloqueado");
+    return;
+  }
+
+  player.type=t;
+
+  if(t==1){player.speed=0.18;}
+  if(t==2){player.speed=0.12;}
+  if(t==3){player.speed=0.15;}
+
+  showMessage("Personaje listo");
 }
 
 // iniciar
@@ -143,11 +167,9 @@ function startGame(){
   canvas.style.display="block";
   document.getElementById("hud").style.display="block";
 
-  // reset mapa
+  // reset
   for(let i=0;i<cols;i++){
-    for(let j=0;j<rows;j++){
-      grid[i][j]=0;
-    }
+    for(let j=0;j<rows;j++) grid[i][j]=0;
   }
 
   player.x=10; player.y=10;
@@ -160,10 +182,8 @@ function startGame(){
   loop();
 }
 
-// volver al menú
-function goMenu(){
-  location.reload();
-}
+// volver
+function goMenu(){ location.reload(); }
 
 // pintar
 function paint(p,color){
@@ -175,59 +195,44 @@ function paint(p,color){
   }
 }
 
-// 🤖 BOT MEJORADO (NO TE SIGUE)
+// 🤖 BOT REAL
 function moveBot(){
 
-  let target = null;
+  let best = null;
+  let bestScore = -999;
 
-  // buscar casillas vacías cerca
   for(let i=0;i<10;i++){
-    let x = Math.floor(bot.x + (Math.random()*6 - 3));
-    let y = Math.floor(bot.y + (Math.random()*6 - 3));
+    let x = Math.floor(Math.random()*cols);
+    let y = Math.floor(Math.random()*rows);
 
-    if(x>=0 && y>=0 && x<cols && y<rows){
-      if(grid[x][y] === 0){
-        target = {x,y};
-        break;
-      }
+    let score = 0;
+
+    if(grid[x][y]==0) score += 3;
+    if(grid[x][y]==1) score += 2;
+
+    let dist = Math.hypot(x-bot.x,y-bot.y);
+    score -= dist * 0.3;
+
+    if(score > bestScore){
+      bestScore = score;
+      best = {x,y};
     }
   }
 
-  // si no encuentra → robar jugador
-  if(!target){
-    for(let i=0;i<10;i++){
-      let x = Math.floor(bot.x + (Math.random()*6 - 3));
-      let y = Math.floor(bot.y + (Math.random()*6 - 3));
+  if(best){
+    let speed = 0.06;
 
-      if(x>=0 && y>=0 && x<cols && y<rows){
-        if(grid[x][y] === 1){
-          target = {x,y};
-          break;
-        }
-      }
-    }
+    if(best.x > bot.x) bot.x += speed;
+    if(best.x < bot.x) bot.x -= speed;
+    if(best.y > bot.y) bot.y += speed;
+    if(best.y < bot.y) bot.y -= speed;
   }
 
-  // fallback random
-  if(!target){
-    target = {
-      x: bot.x + (Math.random()*2 - 1),
-      y: bot.y + (Math.random()*2 - 1)
-    };
-  }
-
-  let speed = 0.07;
-
-  if(target.x > bot.x) bot.x += speed;
-  if(target.x < bot.x) bot.x -= speed;
-  if(target.y > bot.y) bot.y += speed;
-  if(target.y < bot.y) bot.y -= speed;
-
-  bot.x = Math.max(0, Math.min(cols-1, bot.x));
-  bot.y = Math.max(0, Math.min(rows-1, bot.y));
+  bot.x=Math.max(0,Math.min(cols-1,bot.x));
+  bot.y=Math.max(0,Math.min(rows-1,bot.y));
 }
 
-// dibujar
+// draw
 function draw(){
   for(let i=0;i<cols;i++){
     for(let j=0;j<rows;j++){
@@ -249,32 +254,25 @@ function draw(){
 function updateScore(){
   let p1=0,p2=0;
 
-  grid.forEach(col=>{
-    col.forEach(c=>{
-      if(c==1) p1++;
-      if(c==2) p2++;
+  grid.forEach(c=>{
+    c.forEach(v=>{
+      if(v==1)p1++;
+      if(v==2)p2++;
     });
   });
 
   document.getElementById("score").innerText =
-    "Vos: "+p1+" | Bot: "+p2+" | Tiempo: "+Math.floor(time);
+    "Vos:"+p1+" Bot:"+p2+" Tiempo:"+Math.floor(time);
 
   if(time<=0 && playing){
     playing=false;
 
-    let text="";
-
-    if(p1>p2){
-      coins+=30;
-      text="🏆 GANASTE +30 monedas";
-    } else {
-      coins+=10;
-      text="💀 PERDISTE +10 monedas";
-    }
+    let txt="";
+    if(p1>p2){coins+=30; txt="🏆 GANASTE +30";}
+    else {coins+=10; txt="💀 PERDISTE +10";}
 
     localStorage.setItem("coins",coins);
-
-    document.getElementById("endText").innerText=text;
+    document.getElementById("endText").innerText=txt;
 
     canvas.style.display="none";
     document.getElementById("hud").style.display="none";
@@ -282,7 +280,7 @@ function updateScore(){
   }
 }
 
-// joystick
+// 🎮 JOYSTICK FLUIDO
 let joy=document.getElementById("joystick");
 
 joy.addEventListener("touchmove", e=>{
@@ -291,18 +289,17 @@ joy.addEventListener("touchmove", e=>{
   let t=e.touches[0];
   let rect=joy.getBoundingClientRect();
 
-  let dx=(t.clientX-rect.left-50)/50;
-  let dy=(t.clientY-rect.top-50)/50;
+  let dx=(t.clientX-rect.left-55)/55;
+  let dy=(t.clientY-rect.top-55)/55;
 
-  player.x+=dx*player.speed*2;
-  player.y+=dy*player.speed*2;
-
-  player.x=Math.max(0,Math.min(cols-1,player.x));
-  player.y=Math.max(0,Math.min(rows-1,player.y));
+  player.vx = dx * player.speed;
+  player.vy = dy * player.speed;
 });
 
 // habilidad
 function useAbility(){
+  if(abilityCooldown>0) return;
+
   for(let i=-2;i<=2;i++){
     for(let j=-2;j<=2;j++){
       let x=Math.floor(player.x+i);
@@ -314,6 +311,7 @@ function useAbility(){
     }
   }
 
+  abilityCooldown=5;
   showMessage("⚡ Habilidad!");
 }
 
@@ -325,6 +323,13 @@ function loop(){
   let delta=(now-lastTime)/1000;
   lastTime=now;
 
+  // movimiento suave
+  player.x += player.vx;
+  player.y += player.vy;
+
+  player.x=Math.max(0,Math.min(cols-1,player.x));
+  player.y=Math.max(0,Math.min(rows-1,player.y));
+
   paint(player,1);
   moveBot();
   paint(bot,2);
@@ -333,8 +338,41 @@ function loop(){
   updateScore();
 
   time-=delta;
+  if(abilityCooldown>0) abilityCooldown-=delta;
 
   requestAnimationFrame(loop);
+}
+
+// sobres
+function openBox(){
+  if(coins<100){
+    showMessage("❌ No tienes monedas");
+    return;
+  }
+
+  coins-=100;
+
+  let r=Math.random();
+
+  if(r<0.7){
+    let reward=Math.floor(Math.random()*40)+20;
+    coins+=reward;
+    showMessage("💰 +"+reward);
+  } else {
+    let newChar=Math.floor(Math.random()*2)+2;
+
+    if(!unlocked.includes(newChar)){
+      unlocked.push(newChar);
+      localStorage.setItem("unlocked",JSON.stringify(unlocked));
+      showMessage("🧙 Nuevo personaje!");
+    } else {
+      coins+=30;
+      showMessage("Repetido +30");
+    }
+  }
+
+  localStorage.setItem("coins",coins);
+  document.getElementById("coins").innerText=coins;
 }
 
 // bloquear scroll
