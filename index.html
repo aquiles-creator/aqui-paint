@@ -3,124 +3,120 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Juego Paint Arena Online Gratis</title>
-<meta name="description" content="Juego de pintar zonas estilo arena, lucha contra bots y gana monedas">
+<meta name="description" content="Juego de pintar zonas estilo arena contra bots">
 
 <style>
 body {
   margin: 0;
-  background: linear-gradient(135deg, #1e1e2f, #7209b7);
-  color: white;
   font-family: Arial;
   text-align: center;
+  background: linear-gradient(135deg, #1e1e2f, #7209b7);
+  color: white;
 }
 
-canvas {
-  background: #111;
-  display: block;
-  margin: auto;
-}
-
-.controls {
-  position: fixed;
-  bottom: 10px;
-  width: 100%;
+/* 🎨 PANTALLA INICIAL */
+#menu {
+  height: 100vh;
   display: flex;
-  justify-content: space-between;
-}
-
-.joystick {
-  width: 120px;
-  height: 120px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 50%;
-}
-
-.button {
-  width: 80px;
-  height: 80px;
-  background: #f72585;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #3a0ca3, #f72585);
 }
 
-.menu {
-  padding: 20px;
+#menu h1 {
+  font-size: 40px;
+}
+
+#menu img {
+  width: 200px;
+  margin: 20px;
+  border-radius: 20px;
+}
+
+button {
+  padding: 12px 20px;
+  margin: 10px;
+  background: #560bad;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+/* 🎮 JUEGO */
+canvas {
+  display: none;
+  margin: auto;
+  background: #111;
+  border: 2px solid white;
+}
+
+#hud {
+  display: none;
 }
 </style>
 </head>
 
 <body>
 
-<div id="menu" class="menu">
+<!-- 🎨 MENU -->
+<div id="menu">
   <h1>🎨 Paint Arena</h1>
-  <p>Monedas: <span id="coins">0</span></p>
+  
+  <!-- IMAGEN DECORATIVA -->
+  <img src="https://cdn.pixabay.com/photo/2017/01/31/13/14/fantasy-2029446_960_720.png">
+
+  <p>Pinta más que el bot y gana</p>
   <button onclick="startGame()">Jugar</button>
-  <button onclick="openBox()">Abrir sobre</button>
 </div>
 
-<canvas id="game" width="400" height="400" style="display:none;"></canvas>
-
-<div class="controls" id="controls" style="display:none;">
-  <div id="joy" class="joystick"></div>
-  <div id="ult" class="button" onclick="ultimate()">⚡</div>
+<!-- 🎮 HUD -->
+<div id="hud">
+  <p id="score"></p>
 </div>
+
+<!-- 🎮 CANVAS -->
+<canvas id="game" width="400" height="400"></canvas>
 
 <script>
 let canvas = document.getElementById("game");
 let ctx = canvas.getContext("2d");
 
-let size = 20;
-let grid = [];
-let cols = 20, rows = 20;
+let gridSize = 20;
+let cols = 20;
+let rows = 20;
 
-for(let i=0;i<cols;i++){
+// mapa
+let grid = [];
+for (let i=0;i<cols;i++){
   grid[i]=[];
-  for(let j=0;j<rows;j++) grid[i][j]=0;
+  for (let j=0;j<rows;j++) grid[i][j]=0;
 }
 
-// 🧙 PERSONAJES
-const characters = [
-  {name:"Rápido", speed:2, power:1},
-  {name:"Tanque", speed:1, power:2},
-  {name:"Sniper", speed:1, power:1},
-  {name:"Fantasma", speed:1, power:1},
-  {name:"Explosivo", speed:1, power:2},
-  {name:"Equilibrado", speed:1, power:1}
-];
+// jugador y bot
+let player = {x:10,y:10,color:1};
+let bot = {x:5,y:5,color:2};
 
-let player = {...characters[0], x:10, y:10};
-let bot = {x:5, y:5, speed:1, power:1};
+let time = 30;
 
-let coins = localStorage.getItem("coins") || 0;
-document.getElementById("coins").innerText = coins;
-
-let time = 60;
-
-// 🎮 START
+// iniciar juego
 function startGame(){
   document.getElementById("menu").style.display="none";
   canvas.style.display="block";
-  document.getElementById("controls").style.display="flex";
-  gameLoop();
+  document.getElementById("hud").style.display="block";
+  loop();
 }
 
-// 🎨 PINTAR
-function paint(p, id){
-  for(let i=-p.power;i<=p.power;i++){
-    for(let j=-p.power;j<=p.power;j++){
-      let x=p.x+i, y=p.y+j;
-      if(x>=0&&y>=0&&x<cols&&y<rows){
-        grid[x][y]=id;
-      }
-    }
-  }
+// pintar
+function paint(p){
+  grid[p.x][p.y] = p.color;
 }
 
-// 🤖 IA
-function botMove(){
+// bot simple
+function moveBot(){
   let dir = Math.floor(Math.random()*4);
 
   if(dir===0) bot.x++;
@@ -128,115 +124,67 @@ function botMove(){
   if(dir===2) bot.y++;
   if(dir===3) bot.y--;
 
-  bot.x = Math.max(0,Math.min(cols-1,bot.x));
-  bot.y = Math.max(0,Math.min(rows-1,bot.y));
+  bot.x = Math.max(0, Math.min(cols-1, bot.x));
+  bot.y = Math.max(0, Math.min(rows-1, bot.y));
 }
 
-// 🎮 DIBUJO
+// dibujar
 function draw(){
-  for(let i=0;i<cols;i++){
-    for(let j=0;j<rows;j++){
+  for (let i=0;i<cols;i++){
+    for (let j=0;j<rows;j++){
       if(grid[i][j]===1) ctx.fillStyle="#4cc9f0";
       else if(grid[i][j]===2) ctx.fillStyle="#f72585";
       else ctx.fillStyle="#222";
 
-      ctx.fillRect(i*size,j*size,size,size);
+      ctx.fillRect(i*20,j*20,20,20);
     }
   }
-
-  ctx.fillStyle="white";
-  ctx.fillRect(player.x*size,player.y*size,size,size);
-
-  ctx.fillStyle="red";
-  ctx.fillRect(bot.x*size,bot.y*size,size,size);
 }
 
-// 🧮 SCORE
+// puntaje
 function score(){
-  let p=0,b=0;
+  let p1=0, p2=0;
+
   grid.forEach(col=>{
-    col.forEach(c=>{
-      if(c===1) p++;
-      if(c===2) b++;
+    col.forEach(cell=>{
+      if(cell===1) p1++;
+      if(cell===2) p2++;
     });
   });
 
-  return {p,b};
-}
-
-// ⚡ ULTIMATE
-let ultReady=true;
-function ultimate(){
-  if(!ultReady) return;
-
-  player.power=3;
-  ultReady=false;
-
-  setTimeout(()=>player.power=1,2000);
-  setTimeout(()=>ultReady=true,5000);
-}
-
-// 🎮 LOOP
-function gameLoop(){
-  ctx.clearRect(0,0,400,400);
-
-  paint(player,1);
-  paint(bot,2);
-
-  botMove();
-  draw();
-
-  time -= 0.016;
+  document.getElementById("score").innerText =
+    "Vos: "+p1+" | Bot: "+p2+" | Tiempo: "+time;
 
   if(time<=0){
-    let s=score();
-
-    if(s.p > s.b){
-      coins = parseInt(coins)+50;
-      alert("Ganaste! +50 monedas");
-    } else {
-      alert("Perdiste!");
-    }
-
-    localStorage.setItem("coins",coins);
+    if(p1>p2) alert("GANASTE!");
+    else alert("PERDISTE!");
     location.reload();
-    return;
   }
-
-  requestAnimationFrame(gameLoop);
 }
 
-// 🎮 JOYSTICK
-let joy = document.getElementById("joy");
+// control táctil
+document.addEventListener("touchstart", e=>{
+  let x = Math.floor(e.touches[0].clientX / 20);
+  let y = Math.floor((e.touches[0].clientY-80) / 20);
 
-joy.addEventListener("touchmove", e=>{
-  let t=e.touches[0];
-  let rect=joy.getBoundingClientRect();
-
-  let x = t.clientX - rect.left - 60;
-  let y = t.clientY - rect.top - 60;
-
-  if(x>10) player.x+=player.speed;
-  if(x<-10) player.x-=player.speed;
-  if(y>10) player.y+=player.speed;
-  if(y<-10) player.y-=player.speed;
-
-  player.x=Math.max(0,Math.min(cols-1,player.x));
-  player.y=Math.max(0,Math.min(rows-1,player.y));
+  player.x = Math.max(0, Math.min(cols-1, x));
+  player.y = Math.max(0, Math.min(rows-1, y));
 });
 
-// 🎁 SOBRES
-function openBox(){
-  let r=Math.random();
+// loop
+function loop(){
+  paint(player);
+  moveBot();
+  paint(bot);
 
-  if(r<0.7){
-    let reward=Math.floor(Math.random()*50)+10;
-    coins=parseInt(coins)+reward;
-    alert("+"+reward+" monedas");
-  } else if(r<0.9){
-    alert("Skin desbloqueada (próximamente)");
-  } else {
-    alert("Nuevo personaje!");
-  }
+  draw();
+  score();
 
-  localStorage.setItem("coins",
+  time -= 0.05;
+
+  requestAnimationFrame(loop);
+}
+</script>
+
+</body>
+</html>
