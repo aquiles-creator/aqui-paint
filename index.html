@@ -4,105 +4,123 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Juego Paint Arena Online Gratis</title>
-<meta name="description" content="Juego de pintar zonas estilo arena contra bots">
+<title>Paint Arena</title>
 
 <style>
 body {
   margin: 0;
   font-family: Arial;
-  text-align: center;
   background: linear-gradient(135deg, #1e1e2f, #7209b7);
   color: white;
+  text-align: center;
 }
 
-/* 🎨 PANTALLA INICIAL */
 #menu {
   height: 100vh;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
-  background: linear-gradient(135deg, #3a0ca3, #f72585);
-}
-
-#menu h1 {
-  font-size: 40px;
-}
-
-#menu img {
-  width: 200px;
-  margin: 20px;
-  border-radius: 20px;
 }
 
 button {
-  padding: 12px 20px;
-  margin: 10px;
+  padding: 12px;
+  margin: 8px;
   background: #560bad;
   color: white;
   border: none;
   border-radius: 10px;
-  font-size: 16px;
 }
 
-/* 🎮 JUEGO */
 canvas {
   display: none;
   margin: auto;
   background: #111;
-  border: 2px solid white;
 }
 
 #hud {
   display: none;
+}
+
+#joystick {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 100px;
+  height: 100px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 50%;
+}
+
+#ability {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 80px;
+  height: 80px;
+  background: #f72585;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
 }
 </style>
 </head>
 
 <body>
 
-<!-- 🎨 MENU -->
 <div id="menu">
   <h1>🎨 Paint Arena</h1>
-  
-  <!-- IMAGEN DECORATIVA -->
-  <img src="https://cdn.pixabay.com/photo/2017/01/31/13/14/fantasy-2029446_960_720.png">
+  <p>Monedas: <span id="coins">0</span></p>
 
-  <p>Pinta más que el bot y gana</p>
+  <button onclick="selectCharacter(1)">Duende ⚡</button>
+  <button onclick="selectCharacter(2)">Soldado 🛡️</button>
+  <button onclick="selectCharacter(3)">Mago 🔮</button>
+
   <button onclick="startGame()">Jugar</button>
+  <button onclick="openBox()">Abrir sobre</button>
 </div>
 
-<!-- 🎮 HUD -->
 <div id="hud">
   <p id="score"></p>
 </div>
 
-<!-- 🎮 CANVAS -->
 <canvas id="game" width="400" height="400"></canvas>
+
+<div id="joystick"></div>
+<div id="ability" onclick="useAbility()">⚡</div>
 
 <script>
 let canvas = document.getElementById("game");
 let ctx = canvas.getContext("2d");
 
-let gridSize = 20;
-let cols = 20;
-let rows = 20;
+let coins = localStorage.getItem("coins") || 0;
+document.getElementById("coins").innerText = coins;
 
-// mapa
-let grid = [];
-for (let i=0;i<cols;i++){
+let player = {x:10,y:10,speed:1,power:1,type:1};
+let bot = {x:5,y:5};
+
+let cols=20, rows=20;
+let grid=[];
+for(let i=0;i<cols;i++){
   grid[i]=[];
-  for (let j=0;j<rows;j++) grid[i][j]=0;
+  for(let j=0;j<rows;j++) grid[i][j]=0;
 }
 
-// jugador y bot
-let player = {x:10,y:10,color:1};
-let bot = {x:5,y:5,color:2};
+let time=30;
 
-let time = 30;
+// personajes
+function selectCharacter(type){
+  player.type = type;
 
-// iniciar juego
+  if(type==1){ player.speed=2; player.power=1;}
+  if(type==2){ player.speed=1; player.power=2;}
+  if(type==3){ player.speed=1; player.power=3;}
+
+  alert("Personaje seleccionado");
+}
+
+// iniciar
 function startGame(){
   document.getElementById("menu").style.display="none";
   canvas.style.display="block";
@@ -111,78 +129,157 @@ function startGame(){
 }
 
 // pintar
-function paint(p){
-  grid[p.x][p.y] = p.color;
-}
-
-// bot simple
-function moveBot(){
-  let dir = Math.floor(Math.random()*4);
-
-  if(dir===0) bot.x++;
-  if(dir===1) bot.x--;
-  if(dir===2) bot.y++;
-  if(dir===3) bot.y--;
-
-  bot.x = Math.max(0, Math.min(cols-1, bot.x));
-  bot.y = Math.max(0, Math.min(rows-1, bot.y));
-}
-
-// dibujar
-function draw(){
-  for (let i=0;i<cols;i++){
-    for (let j=0;j<rows;j++){
-      if(grid[i][j]===1) ctx.fillStyle="#4cc9f0";
-      else if(grid[i][j]===2) ctx.fillStyle="#f72585";
-      else ctx.fillStyle="#222";
-
-      ctx.fillRect(i*20,j*20,20,20);
+function paint(p,color,power){
+  for(let i=-power;i<=power;i++){
+    for(let j=-power;j<=power;j++){
+      let x=p.x+i;
+      let y=p.y+j;
+      if(x>=0&&y>=0&&x<cols&&y<rows){
+        grid[x][y]=color;
+      }
     }
   }
 }
 
-// puntaje
-function score(){
-  let p1=0, p2=0;
+// bot
+function moveBot(){
+  if(Math.random()<0.3){
+    let d=Math.floor(Math.random()*4);
+    if(d==0) bot.x++;
+    if(d==1) bot.x--;
+    if(d==2) bot.y++;
+    if(d==3) bot.y--;
+  }
 
+  bot.x=Math.max(0,Math.min(cols-1,bot.x));
+  bot.y=Math.max(0,Math.min(rows-1,bot.y));
+}
+
+// dibujar
+function draw(){
+  for(let i=0;i<cols;i++){
+    for(let j=0;j<rows;j++){
+      if(grid[i][j]==1) ctx.fillStyle="#4cc9f0";
+      else if(grid[i][j]==2) ctx.fillStyle="#f72585";
+      else ctx.fillStyle="#222";
+      ctx.fillRect(i*20,j*20,20,20);
+    }
+  }
+
+  // player visual
+  if(player.type==1){
+    ctx.fillStyle="lime";
+    ctx.fillRect(player.x*20,player.y*20,20,20);
+  }
+  if(player.type==2){
+    ctx.fillStyle="gray";
+    ctx.fillRect(player.x*20,player.y*20,20,20);
+    ctx.fillStyle="white";
+    ctx.fillRect(player.x*20+5,player.y*20+5,10,10);
+  }
+  if(player.type==3){
+    ctx.fillStyle="purple";
+    ctx.beginPath();
+    ctx.arc(player.x*20+10,player.y*20+10,10,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle="red";
+  ctx.fillRect(bot.x*20,bot.y*20,20,20);
+}
+
+// score
+function updateScore(){
+  let p1=0,p2=0;
   grid.forEach(col=>{
-    col.forEach(cell=>{
-      if(cell===1) p1++;
-      if(cell===2) p2++;
+    col.forEach(c=>{
+      if(c==1) p1++;
+      if(c==2) p2++;
     });
   });
 
   document.getElementById("score").innerText =
-    "Vos: "+p1+" | Bot: "+p2+" | Tiempo: "+time;
+    "Vos: "+p1+" | Bot: "+p2+" | Tiempo: "+Math.floor(time);
 
   if(time<=0){
-    if(p1>p2) alert("GANASTE!");
-    else alert("PERDISTE!");
+    if(p1>p2){
+      alert("GANASTE!");
+      coins = parseInt(coins)+50;
+    } else {
+      alert("PERDISTE!");
+    }
+
+    localStorage.setItem("coins",coins);
     location.reload();
   }
 }
 
-// control táctil
-document.addEventListener("touchstart", e=>{
-  let x = Math.floor(e.touches[0].clientX / 20);
-  let y = Math.floor((e.touches[0].clientY-80) / 20);
+// joystick
+let joy=document.getElementById("joystick");
 
-  player.x = Math.max(0, Math.min(cols-1, x));
-  player.y = Math.max(0, Math.min(rows-1, y));
+joy.addEventListener("touchmove", e=>{
+  let t=e.touches[0];
+  let rect=joy.getBoundingClientRect();
+
+  let x=t.clientX-rect.left-50;
+  let y=t.clientY-rect.top-50;
+
+  if(x>10) player.x+=player.speed;
+  if(x<-10) player.x-=player.speed;
+  if(y>10) player.y+=player.speed;
+  if(y<-10) player.y-=player.speed;
+
+  player.x=Math.max(0,Math.min(cols-1,player.x));
+  player.y=Math.max(0,Math.min(rows-1,player.y));
 });
+
+// habilidades
+function useAbility(){
+  if(player.type==2){
+    player.x += 3;
+  }
+
+  if(player.type==3){
+    for(let i=-2;i<=2;i++){
+      for(let j=-2;j<=2;j++){
+        let x=player.x+i;
+        let y=player.y+j;
+        if(x>=0&&y>=0&&x<cols&&y<rows){
+          grid[x][y]=1;
+        }
+      }
+    }
+  }
+}
 
 // loop
 function loop(){
-  paint(player);
+  paint(player,1,player.power);
   moveBot();
-  paint(bot);
+  paint(bot,2,1);
 
   draw();
-  score();
+  updateScore();
 
-  time -= 0.05;
+  time-=0.05;
 
   requestAnimationFrame(loop);
+}
+
+// sobres
+function openBox(){
+  let r=Math.random();
+
+  if(r<0.7){
+    let reward=20;
+    coins=parseInt(coins)+reward;
+    alert("Ganaste "+reward+" monedas!");
+  }else{
+    alert("Skin o personaje (próximamente)");
+  }
+
+  localStorage.setItem("coins",coins);
+  document.getElementById("coins").innerText=coins;
 }
 </script>
 
