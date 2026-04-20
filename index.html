@@ -18,7 +18,7 @@ html, body {
   user-select:none;
 }
 
-#menu {
+#menu, #endScreen {
   height:100vh;
   display:flex;
   flex-direction:column;
@@ -34,11 +34,7 @@ button {
   border-radius:10px;
 }
 
-canvas {
-  display:none;
-  margin:auto;
-  background:#111;
-}
+canvas { display:none; background:#111; margin:auto; }
 
 #hud { display:none; }
 
@@ -80,20 +76,28 @@ canvas {
 
 <body>
 
+<!-- MENU -->
 <div id="menu">
   <h1>🎨 Paint Arena</h1>
   <p>Monedas: <span id="coins">0</span></p>
   <button onclick="startGame()">Jugar</button>
 </div>
 
+<!-- FIN -->
+<div id="endScreen" style="display:none;">
+  <h1 id="endText"></h1>
+  <button onclick="goMenu()">Volver al menú</button>
+</div>
+
+<!-- HUD -->
 <div id="hud">
   <p id="score"></p>
-  <p id="mission"></p>
 </div>
 
 <div id="message"></div>
 
 <canvas id="game"></canvas>
+
 <div id="joystick"></div>
 <div id="ability" onclick="useAbility()">⚡</div>
 
@@ -111,27 +115,18 @@ document.getElementById("coins").innerText = coins;
 
 // mapa
 let grid=[];
-let obstacles=[];
 for(let i=0;i<cols;i++){
   grid[i]=[];
-  for(let j=0;j<rows;j++){
-    grid[i][j]=0;
-
-    if(Math.random()<0.05){
-      obstacles.push({x:i,y:j});
-    }
-  }
+  for(let j=0;j<rows;j++) grid[i][j]=0;
 }
 
-// jugador
-let player = {x:10,y:10,speed:0.08,power:1};
+// jugador y bot
+let player = {x:10,y:10,speed:0.08};
 let bot = {x:5,y:5};
 
 let time=30;
 let lastTime=Date.now();
-
-// misión
-let missionGoal = 150;
+let playing=false;
 
 // mensaje
 function showMessage(text){
@@ -144,74 +139,104 @@ function showMessage(text){
 // iniciar
 function startGame(){
   document.getElementById("menu").style.display="none";
+  document.getElementById("endScreen").style.display="none";
   canvas.style.display="block";
   document.getElementById("hud").style.display="block";
+
+  // reset mapa
+  for(let i=0;i<cols;i++){
+    for(let j=0;j<rows;j++){
+      grid[i][j]=0;
+    }
+  }
+
+  player.x=10; player.y=10;
+  bot.x=5; bot.y=5;
+
+  time=30;
+  playing=true;
+  lastTime=Date.now();
+
   loop();
 }
 
-// pintar con efecto
-function paint(p,color,power){
-  for(let i=-power;i<=power;i++){
-    for(let j=-power;j<=power;j++){
-      let x=Math.floor(p.x+i);
-      let y=Math.floor(p.y+j);
+// volver al menú
+function goMenu(){
+  location.reload();
+}
 
-      if(x>=0&&y>=0&&x<cols&&y<rows){
+// pintar
+function paint(p,color){
+  let x=Math.floor(p.x);
+  let y=Math.floor(p.y);
 
-        // evitar obstáculos
-        if(obstacles.some(o=>o.x==x&&o.y==y)) continue;
-
-        grid[x][y]=color;
-
-        // efecto visual simple
-        ctx.fillStyle = "white";
-        ctx.fillRect(x*20,y*20,5,5);
-      }
-    }
+  if(x>=0&&y>=0&&x<cols&&y<rows){
+    grid[x][y]=color;
   }
 }
 
-// bot mejorado (roba)
+// 🤖 BOT MEJORADO (NO TE SIGUE)
 function moveBot(){
+
   let target = null;
 
-  // prioriza zonas del jugador
-  for(let i=0;i<cols;i++){
-    for(let j=0;j<rows;j++){
-      if(grid[i][j]==1){
-        target={x:i,y:j};
+  // buscar casillas vacías cerca
+  for(let i=0;i<10;i++){
+    let x = Math.floor(bot.x + (Math.random()*6 - 3));
+    let y = Math.floor(bot.y + (Math.random()*6 - 3));
+
+    if(x>=0 && y>=0 && x<cols && y<rows){
+      if(grid[x][y] === 0){
+        target = {x,y};
+        break;
       }
     }
   }
 
+  // si no encuentra → robar jugador
   if(!target){
-    target={x:Math.random()*cols,y:Math.random()*rows};
+    for(let i=0;i<10;i++){
+      let x = Math.floor(bot.x + (Math.random()*6 - 3));
+      let y = Math.floor(bot.y + (Math.random()*6 - 3));
+
+      if(x>=0 && y>=0 && x<cols && y<rows){
+        if(grid[x][y] === 1){
+          target = {x,y};
+          break;
+        }
+      }
+    }
   }
 
-  if(target.x>bot.x) bot.x+=0.1;
-  if(target.x<bot.x) bot.x-=0.1;
-  if(target.y>bot.y) bot.y+=0.1;
-  if(target.y<bot.y) bot.y-=0.1;
+  // fallback random
+  if(!target){
+    target = {
+      x: bot.x + (Math.random()*2 - 1),
+      y: bot.y + (Math.random()*2 - 1)
+    };
+  }
+
+  let speed = 0.07;
+
+  if(target.x > bot.x) bot.x += speed;
+  if(target.x < bot.x) bot.x -= speed;
+  if(target.y > bot.y) bot.y += speed;
+  if(target.y < bot.y) bot.y -= speed;
+
+  bot.x = Math.max(0, Math.min(cols-1, bot.x));
+  bot.y = Math.max(0, Math.min(rows-1, bot.y));
 }
 
 // dibujar
 function draw(){
   for(let i=0;i<cols;i++){
     for(let j=0;j<rows;j++){
-
       if(grid[i][j]==1) ctx.fillStyle="#4cc9f0";
       else if(grid[i][j]==2) ctx.fillStyle="#f72585";
       else ctx.fillStyle="#222";
-
       ctx.fillRect(i*20,j*20,20,20);
     }
   }
-
-  // obstáculos
-  ctx.fillStyle="black";
-  obstacles.forEach(o=>{
-    ctx.fillRect(o.x*20,o.y*20,20,20);
-  });
 
   ctx.fillStyle="lime";
   ctx.fillRect(player.x*20,player.y*20,20,20);
@@ -234,25 +259,26 @@ function updateScore(){
   document.getElementById("score").innerText =
     "Vos: "+p1+" | Bot: "+p2+" | Tiempo: "+Math.floor(time);
 
-  document.getElementById("mission").innerText =
-    "Misión: pinta "+missionGoal;
+  if(time<=0 && playing){
+    playing=false;
 
-  if(p1>=missionGoal){
-    coins+=100;
-    showMessage("🎯 MISIÓN COMPLETADA +100");
-  }
+    let text="";
 
-  if(time<=0){
     if(p1>p2){
-      coins+=50;
-      showMessage("🏆 GANASTE +50");
+      coins+=30;
+      text="🏆 GANASTE +30 monedas";
     } else {
-      coins+=20;
-      showMessage("💀 PERDISTE +20");
+      coins+=10;
+      text="💀 PERDISTE +10 monedas";
     }
 
     localStorage.setItem("coins",coins);
-    setTimeout(()=>location.reload(),1500);
+
+    document.getElementById("endText").innerText=text;
+
+    canvas.style.display="none";
+    document.getElementById("hud").style.display="none";
+    document.getElementById("endScreen").style.display="flex";
   }
 }
 
@@ -270,14 +296,18 @@ joy.addEventListener("touchmove", e=>{
 
   player.x+=dx*player.speed*2;
   player.y+=dy*player.speed*2;
+
+  player.x=Math.max(0,Math.min(cols-1,player.x));
+  player.y=Math.max(0,Math.min(rows-1,player.y));
 });
 
-// habilidad mejorada
+// habilidad
 function useAbility(){
-  for(let i=-3;i<=3;i++){
-    for(let j=-3;j<=3;j++){
+  for(let i=-2;i<=2;i++){
+    for(let j=-2;j<=2;j++){
       let x=Math.floor(player.x+i);
       let y=Math.floor(player.y+j);
+
       if(x>=0&&y>=0&&x<cols&&y<rows){
         grid[x][y]=1;
       }
@@ -289,13 +319,15 @@ function useAbility(){
 
 // loop
 function loop(){
+  if(!playing) return;
+
   let now=Date.now();
   let delta=(now-lastTime)/1000;
   lastTime=now;
 
-  paint(player,1,1);
+  paint(player,1);
   moveBot();
-  paint(bot,2,1);
+  paint(bot,2);
 
   draw();
   updateScore();
@@ -304,6 +336,9 @@ function loop(){
 
   requestAnimationFrame(loop);
 }
+
+// bloquear scroll
+document.addEventListener("touchmove", e=>e.preventDefault(), {passive:false});
 </script>
 
 </body>
