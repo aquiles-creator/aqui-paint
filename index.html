@@ -13,6 +13,8 @@ body{
   background:#1e1e2f;
   color:white;
   text-align:center;
+  overflow:hidden;
+  touch-action:none;
 }
 
 button{
@@ -31,7 +33,11 @@ button{
   justify-content:center;
 }
 
-canvas{display:none;background:#111;margin:auto;}
+canvas{
+  display:none;
+  background:#111;
+  margin:auto;
+}
 
 .skin{
   margin:10px;
@@ -39,6 +45,27 @@ canvas{display:none;background:#111;margin:auto;}
 
 .locked{
   opacity:0.4;
+}
+
+#joystick{
+  position:fixed;
+  bottom:20px;
+  left:20px;
+  width:100px;
+  height:100px;
+  background:rgba(255,255,255,0.1);
+  border-radius:50%;
+}
+
+#message{
+  position:fixed;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#000a;
+  padding:10px 20px;
+  border-radius:10px;
+  display:none;
 }
 </style>
 </head>
@@ -48,18 +75,14 @@ canvas{display:none;background:#111;margin:auto;}
 <!-- MENU -->
 <div id="menu">
   <h1>🎨 Paint Arena</h1>
-  <p>Monedas: <span id="coins">0</span></p>
-
   <button onclick="startGame()">Jugar</button>
   <button onclick="openCharacters()">Personaje</button>
 </div>
 
-<!-- MENU PERSONAJES -->
+<!-- PERSONAJES -->
 <div id="charactersMenu" style="display:none;">
   <h2>Personajes</h2>
-
   <div id="skinsContainer"></div>
-
   <button onclick="backMenu()">Volver</button>
 </div>
 
@@ -69,55 +92,47 @@ canvas{display:none;background:#111;margin:auto;}
   <button onclick="goMenu()">Menú</button>
 </div>
 
+<div id="message"></div>
+
 <canvas id="game"></canvas>
+<div id="joystick"></div>
 
 <script>
 let canvas=document.getElementById("game");
 let ctx=canvas.getContext("2d");
 
-let cols=20,rows=20;
-canvas.width=cols*25;
-canvas.height=rows*25;
+let cols=25,rows=25;
+canvas.width=cols*20;
+canvas.height=rows*20;
 
-// monedas
-let coins=parseInt(localStorage.getItem("coins"))||0;
-document.getElementById("coins").innerText=coins;
-
-// skins desbloqueadas
+// skins
 let skinsUnlocked=JSON.parse(localStorage.getItem("skins"))||["duende1"];
-
-// personaje actual
 let currentSkin=localStorage.getItem("skin")||"duende1";
 
-// cargar imágenes
-let images={
-  duende1:new Image(),
-  duende2:new Image(),
-  soldado1:new Image(),
-  soldado2:new Image(),
-  mago1:new Image(),
-  mago2:new Image()
-};
-
-images.duende1.src="assets/duende.png";
-images.duende2.src="assets/duende_skin2.png";
-images.soldado1.src="assets/soldado.png";
-images.soldado2.src="assets/soldado_skin2.png";
-images.mago1.src="assets/mago.png";
-images.mago2.src="assets/mago_skin2.png";
-
 // jugador
-let player={x:5,y:5};
-let bot={x:10,y:10};
+let player={x:10,y:10,vx:0,vy:0,speed:0.15};
+let bot={x:5,y:5};
 
-// grid
+// mapa
 let grid=[];
 for(let i=0;i<cols;i++){
   grid[i]=[];
   for(let j=0;j<rows;j++) grid[i][j]=0;
 }
 
-// abrir menú personajes
+let time=30;
+let playing=false;
+let lastTime=Date.now();
+
+// mensaje
+function showMessage(t){
+  let m=document.getElementById("message");
+  m.innerText=t;
+  m.style.display="block";
+  setTimeout(()=>m.style.display="none",2000);
+}
+
+// menú personajes
 function openCharacters(){
   document.getElementById("menu").style.display="none";
   document.getElementById("charactersMenu").style.display="flex";
@@ -131,9 +146,12 @@ function openCharacters(){
     let div=document.createElement("div");
     div.className="skin";
 
-    let img=document.createElement("img");
-    img.src=images[s].src;
-    img.width=60;
+    let emoji="❓";
+    if(s.includes("duende")) emoji="👺";
+    if(s.includes("soldado")) emoji="🪖";
+    if(s.includes("mago")) emoji="🧙";
+
+    div.innerHTML=`<div style="font-size:40px">${emoji}</div>`;
 
     if(!skinsUnlocked.includes(s)){
       div.classList.add("locked");
@@ -142,11 +160,10 @@ function openCharacters(){
       div.onclick=()=>{
         currentSkin=s;
         localStorage.setItem("skin",s);
-        alert("Skin seleccionada");
+        showMessage("Seleccionado");
       }
     }
 
-    div.appendChild(img);
     c.appendChild(div);
   });
 }
@@ -156,12 +173,26 @@ function backMenu(){
   document.getElementById("menu").style.display="flex";
 }
 
-// iniciar juego
+// iniciar
 function startGame(){
   document.getElementById("menu").style.display="none";
   canvas.style.display="block";
+
+  for(let i=0;i<cols;i++){
+    for(let j=0;j<rows;j++) grid[i][j]=0;
+  }
+
+  player.x=10; player.y=10;
+  bot.x=5; bot.y=5;
+
+  time=30;
+  playing=true;
+  lastTime=Date.now();
+
   loop();
 }
+
+function goMenu(){ location.reload(); }
 
 // pintar
 function paint(p,c){
@@ -172,12 +203,13 @@ function paint(p,c){
   }
 }
 
-// bot simple mejorado
+// 🤖 BOT
 function moveBot(){
-  let target={x:Math.random()*cols,y:Math.random()*rows};
+  let tx=Math.random()*cols;
+  let ty=Math.random()*rows;
 
-  let dx=target.x-bot.x;
-  let dy=target.y-bot.y;
+  let dx=tx-bot.x;
+  let dy=ty-bot.y;
   let d=Math.hypot(dx,dy);
 
   bot.x+=dx/d*0.05;
@@ -187,31 +219,97 @@ function moveBot(){
   bot.y=Math.max(0,Math.min(rows-1.01,bot.y));
 }
 
-// dibujar
+// 🎨 PERSONAJE
+function drawCharacter(x,y,skin){
+  let px=x*20;
+  let py=y*20;
+
+  if(skin.includes("duende")) ctx.fillStyle="green";
+  if(skin.includes("soldado")) ctx.fillStyle="blue";
+  if(skin.includes("mago")) ctx.fillStyle="purple";
+
+  ctx.fillRect(px,py,20,20);
+
+  ctx.font="16px Arial";
+  ctx.textAlign="center";
+
+  let emoji="";
+
+  if(skin=="duende1") emoji="👺";
+  if(skin=="duende2") emoji="😈";
+  if(skin=="soldado1") emoji="🪖";
+  if(skin=="soldado2") emoji="🤖";
+  if(skin=="mago1") emoji="🧙";
+  if(skin=="mago2") emoji="👻";
+
+  ctx.fillText(emoji, px+10, py+15);
+}
+
+// draw
 function draw(){
   for(let i=0;i<cols;i++){
     for(let j=0;j<rows;j++){
-      if(grid[i][j]==1) ctx.fillStyle="blue";
-      else if(grid[i][j]==2) ctx.fillStyle="red";
+      if(grid[i][j]==1) ctx.fillStyle="#4cc9f0";
+      else if(grid[i][j]==2) ctx.fillStyle="#f72585";
       else ctx.fillStyle="#222";
-      ctx.fillRect(i*25,j*25,25,25);
+      ctx.fillRect(i*20,j*20,20,20);
     }
   }
 
-  ctx.drawImage(images[currentSkin],player.x*25,player.y*25,25,25);
-  ctx.fillStyle="red";
-  ctx.fillRect(bot.x*25,bot.y*25,25,25);
+  drawCharacter(player.x,player.y,currentSkin);
+  drawCharacter(bot.x,bot.y,"soldado1");
 }
 
 // loop
 function loop(){
+  if(!playing) return;
+
+  let now=Date.now();
+  let delta=(now-lastTime)/1000;
+  lastTime=now;
+
+  player.x+=player.vx;
+  player.y+=player.vy;
+
+  player.x=Math.max(0,Math.min(cols-1.01,player.x));
+  player.y=Math.max(0,Math.min(rows-1.01,player.y));
+
   paint(player,1);
   moveBot();
   paint(bot,2);
 
   draw();
+
+  time-=delta;
+
+  if(time<=0){
+    playing=false;
+    document.getElementById("endText").innerText="Fin de partida";
+    canvas.style.display="none";
+    document.getElementById("endScreen").style.display="flex";
+  }
+
   requestAnimationFrame(loop);
 }
+
+// 🎮 JOYSTICK
+let joy=document.getElementById("joystick");
+
+joy.addEventListener("touchmove", e=>{
+  e.preventDefault();
+
+  let t=e.touches[0];
+  let rect=joy.getBoundingClientRect();
+
+  let dx=(t.clientX-rect.left-50)/50;
+  let dy=(t.clientY-rect.top-50)/50;
+
+  player.vx=dx*player.speed;
+  player.vy=dy*player.speed;
+});
+
+// bloquear scroll
+document.addEventListener("touchmove", e=>e.preventDefault(), {passive:false});
 </script>
 
 </body>
