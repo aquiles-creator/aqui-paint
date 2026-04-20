@@ -7,12 +7,15 @@
 <title>Paint Arena</title>
 
 <style>
-body {
+html, body {
   margin:0;
   font-family:Arial;
-  background: linear-gradient(135deg, #1e1e2f, #7209b7);
+  background:#1e1e2f;
   color:white;
   text-align:center;
+  touch-action:none;
+  overflow:hidden;
+  user-select:none;
 }
 
 #menu {
@@ -60,7 +63,6 @@ canvas {
   display:flex;
   align-items:center;
   justify-content:center;
-  font-size:20px;
 }
 
 #message {
@@ -72,7 +74,6 @@ canvas {
   padding:10px 20px;
   border-radius:10px;
   display:none;
-  font-weight:bold;
 }
 </style>
 </head>
@@ -82,23 +83,17 @@ canvas {
 <div id="menu">
   <h1>🎨 Paint Arena</h1>
   <p>Monedas: <span id="coins">0</span></p>
-
-  <button onclick="selectCharacter(1)">Duende ⚡</button>
-  <button onclick="selectCharacter(2)">Soldado 🛡️ 🔒</button>
-  <button onclick="selectCharacter(3)">Mago 🔮 🔒</button>
-
   <button onclick="startGame()">Jugar</button>
-  <button onclick="openBox()">Abrir sobre (100 🪙)</button>
 </div>
 
 <div id="hud">
   <p id="score"></p>
+  <p id="mission"></p>
 </div>
 
 <div id="message"></div>
 
 <canvas id="game"></canvas>
-
 <div id="joystick"></div>
 <div id="ability" onclick="useAbility()">⚡</div>
 
@@ -106,51 +101,44 @@ canvas {
 let canvas = document.getElementById("game");
 let ctx = canvas.getContext("2d");
 
-let coins = parseInt(localStorage.getItem("coins")) || 0;
-document.getElementById("coins").innerText = coins;
-
-let unlocked = JSON.parse(localStorage.getItem("unlocked")) || [1];
-
 let cols=30, rows=30;
 canvas.width = cols*20;
 canvas.height = rows*20;
 
+// monedas
+let coins = parseInt(localStorage.getItem("coins")) || 0;
+document.getElementById("coins").innerText = coins;
+
+// mapa
 let grid=[];
+let obstacles=[];
 for(let i=0;i<cols;i++){
   grid[i]=[];
-  for(let j=0;j<rows;j++) grid[i][j]=0;
+  for(let j=0;j<rows;j++){
+    grid[i][j]=0;
+
+    if(Math.random()<0.05){
+      obstacles.push({x:i,y:j});
+    }
+  }
 }
 
-let player = {x:10,y:10,speed:0.08,power:1,type:1};
+// jugador
+let player = {x:10,y:10,speed:0.08,power:1};
 let bot = {x:5,y:5};
 
 let time=30;
 let lastTime=Date.now();
-let abilityCooldown=0;
-let boxCost=100;
 
-// mensajes
+// misión
+let missionGoal = 150;
+
+// mensaje
 function showMessage(text){
-  let msg=document.getElementById("message");
-  msg.innerText=text;
-  msg.style.display="block";
-  setTimeout(()=>msg.style.display="none",2000);
-}
-
-// seleccionar personaje
-function selectCharacter(type){
-  if(!unlocked.includes(type)){
-    showMessage("🔒 Bloqueado");
-    return;
-  }
-
-  player.type=type;
-
-  if(type==1){ player.speed=0.1; player.power=1;}
-  if(type==2){ player.speed=0.06; player.power=2;}
-  if(type==3){ player.speed=0.08; player.power=3;}
-
-  showMessage("Personaje listo");
+  let m=document.getElementById("message");
+  m.innerText=text;
+  m.style.display="block";
+  setTimeout(()=>m.style.display="none",2000);
 }
 
 // iniciar
@@ -161,67 +149,72 @@ function startGame(){
   loop();
 }
 
-// pintar
+// pintar con efecto
 function paint(p,color,power){
   for(let i=-power;i<=power;i++){
     for(let j=-power;j<=power;j++){
       let x=Math.floor(p.x+i);
       let y=Math.floor(p.y+j);
+
       if(x>=0&&y>=0&&x<cols&&y<rows){
+
+        // evitar obstáculos
+        if(obstacles.some(o=>o.x==x&&o.y==y)) continue;
+
         grid[x][y]=color;
+
+        // efecto visual simple
+        ctx.fillStyle = "white";
+        ctx.fillRect(x*20,y*20,5,5);
       }
     }
   }
 }
 
-// bot inteligente
+// bot mejorado (roba)
 function moveBot(){
-  let tx=bot.x, ty=bot.y;
+  let target = null;
 
-  for(let i=-2;i<=2;i++){
-    for(let j=-2;j<=2;j++){
-      let x=bot.x+i;
-      let y=bot.y+j;
-      if(x>=0&&y>=0&&x<cols&&y<rows){
-        if(grid[x][y]!=2){
-          tx=x; ty=y;
-        }
+  // prioriza zonas del jugador
+  for(let i=0;i<cols;i++){
+    for(let j=0;j<rows;j++){
+      if(grid[i][j]==1){
+        target={x:i,y:j};
       }
     }
   }
 
-  if(tx>bot.x) bot.x+=0.1;
-  if(tx<bot.x) bot.x-=0.1;
-  if(ty>bot.y) bot.y+=0.1;
-  if(ty<bot.y) bot.y-=0.1;
+  if(!target){
+    target={x:Math.random()*cols,y:Math.random()*rows};
+  }
 
-  bot.x=Math.max(0,Math.min(cols-1,bot.x));
-  bot.y=Math.max(0,Math.min(rows-1,bot.y));
+  if(target.x>bot.x) bot.x+=0.1;
+  if(target.x<bot.x) bot.x-=0.1;
+  if(target.y>bot.y) bot.y+=0.1;
+  if(target.y<bot.y) bot.y-=0.1;
 }
 
-// draw
+// dibujar
 function draw(){
   for(let i=0;i<cols;i++){
     for(let j=0;j<rows;j++){
+
       if(grid[i][j]==1) ctx.fillStyle="#4cc9f0";
       else if(grid[i][j]==2) ctx.fillStyle="#f72585";
       else ctx.fillStyle="#222";
+
       ctx.fillRect(i*20,j*20,20,20);
     }
   }
 
-  let px=player.x*20;
-  let py=player.y*20;
+  // obstáculos
+  ctx.fillStyle="black";
+  obstacles.forEach(o=>{
+    ctx.fillRect(o.x*20,o.y*20,20,20);
+  });
 
-  ctx.fillStyle = player.type==1 ? "lime" : player.type==2 ? "gray" : "purple";
-  ctx.fillRect(px,py,20,20);
-
-  ctx.font="14px Arial";
-  ctx.textAlign="center";
-
-  if(player.type==1) ctx.fillText("👺",px+10,py+15);
-  if(player.type==2) ctx.fillText("🪖",px+10,py+15);
-  if(player.type==3) ctx.fillText("🧙",px+10,py+15);
+  ctx.fillStyle="lime";
+  ctx.fillRect(player.x*20,player.y*20,20,20);
 
   ctx.fillStyle="red";
   ctx.fillRect(bot.x*20,bot.y*20,20,20);
@@ -230,6 +223,7 @@ function draw(){
 // score
 function updateScore(){
   let p1=0,p2=0;
+
   grid.forEach(col=>{
     col.forEach(c=>{
       if(c==1) p1++;
@@ -240,13 +234,21 @@ function updateScore(){
   document.getElementById("score").innerText =
     "Vos: "+p1+" | Bot: "+p2+" | Tiempo: "+Math.floor(time);
 
+  document.getElementById("mission").innerText =
+    "Misión: pinta "+missionGoal;
+
+  if(p1>=missionGoal){
+    coins+=100;
+    showMessage("🎯 MISIÓN COMPLETADA +100");
+  }
+
   if(time<=0){
     if(p1>p2){
       coins+=50;
       showMessage("🏆 GANASTE +50");
     } else {
-      coins+=15;
-      showMessage("💀 PERDISTE +15");
+      coins+=20;
+      showMessage("💀 PERDISTE +20");
     }
 
     localStorage.setItem("coins",coins);
@@ -258,6 +260,8 @@ function updateScore(){
 let joy=document.getElementById("joystick");
 
 joy.addEventListener("touchmove", e=>{
+  e.preventDefault();
+
   let t=e.touches[0];
   let rect=joy.getBoundingClientRect();
 
@@ -266,32 +270,21 @@ joy.addEventListener("touchmove", e=>{
 
   player.x+=dx*player.speed*2;
   player.y+=dy*player.speed*2;
-
-  player.x=Math.max(0,Math.min(cols-1,player.x));
-  player.y=Math.max(0,Math.min(rows-1,player.y));
 });
 
-// habilidad
+// habilidad mejorada
 function useAbility(){
-  if(abilityCooldown>0) return;
-
-  if(player.type==2){
-    player.x+=2;
-  }
-
-  if(player.type==3){
-    for(let i=-2;i<=2;i++){
-      for(let j=-2;j<=2;j++){
-        let x=Math.floor(player.x+i);
-        let y=Math.floor(player.y+j);
-        if(x>=0&&y>=0&&x<cols&&y<rows){
-          grid[x][y]=1;
-        }
+  for(let i=-3;i<=3;i++){
+    for(let j=-3;j<=3;j++){
+      let x=Math.floor(player.x+i);
+      let y=Math.floor(player.y+j);
+      if(x>=0&&y>=0&&x<cols&&y<rows){
+        grid[x][y]=1;
       }
     }
   }
 
-  abilityCooldown=5;
+  showMessage("⚡ Habilidad!");
 }
 
 // loop
@@ -300,7 +293,7 @@ function loop(){
   let delta=(now-lastTime)/1000;
   lastTime=now;
 
-  paint(player,1,player.power);
+  paint(player,1,1);
   moveBot();
   paint(bot,2,1);
 
@@ -308,45 +301,8 @@ function loop(){
   updateScore();
 
   time-=delta;
-  if(abilityCooldown>0) abilityCooldown-=delta;
 
   requestAnimationFrame(loop);
-}
-
-// sobres
-function openBox(){
-  if(coins<boxCost){
-    showMessage("❌ No tienes monedas");
-    return;
-  }
-
-  coins-=boxCost;
-
-  let r=Math.random();
-
-  if(r<0.7){
-    let reward=Math.floor(Math.random()*40)+20;
-    coins+=reward;
-    showMessage("💰 +"+reward);
-  }
-  else if(r<0.9){
-    showMessage("🎨 Skin (pronto)");
-  }
-  else{
-    let newChar=Math.floor(Math.random()*2)+2;
-
-    if(!unlocked.includes(newChar)){
-      unlocked.push(newChar);
-      localStorage.setItem("unlocked",JSON.stringify(unlocked));
-      showMessage("🧙 Nuevo personaje!");
-    } else {
-      coins+=30;
-      showMessage("Repetido +30");
-    }
-  }
-
-  localStorage.setItem("coins",coins);
-  document.getElementById("coins").innerText=coins;
 }
 </script>
 
