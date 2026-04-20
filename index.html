@@ -8,61 +8,71 @@
 
 <style>
 body {
-  margin: 0;
-  font-family: Arial;
+  margin:0;
+  font-family:Arial;
   background: linear-gradient(135deg, #1e1e2f, #7209b7);
-  color: white;
-  text-align: center;
+  color:white;
+  text-align:center;
 }
 
 #menu {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
 }
 
 button {
-  padding: 12px;
-  margin: 8px;
-  background: #560bad;
-  color: white;
-  border: none;
-  border-radius: 10px;
+  padding:12px;
+  margin:8px;
+  background:#560bad;
+  color:white;
+  border:none;
+  border-radius:10px;
 }
 
 canvas {
-  display: none;
-  margin: auto;
-  background: #111;
+  display:none;
+  margin:auto;
+  background:#111;
 }
 
-#hud {
-  display: none;
-}
+#hud { display:none; }
 
 #joystick {
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  width: 100px;
-  height: 100px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 50%;
+  position:fixed;
+  bottom:20px;
+  left:20px;
+  width:100px;
+  height:100px;
+  background:rgba(255,255,255,0.1);
+  border-radius:50%;
 }
 
 #ability {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 80px;
-  height: 80px;
-  background: #f72585;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
+  position:fixed;
+  bottom:20px;
+  right:20px;
+  width:80px;
+  height:80px;
+  background:#f72585;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
+}
+
+#message {
+  position:fixed;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#000a;
+  padding:10px 20px;
+  border-radius:10px;
+  display:none;
+  font-weight:bold;
 }
 </style>
 </head>
@@ -74,18 +84,20 @@ canvas {
   <p>Monedas: <span id="coins">0</span></p>
 
   <button onclick="selectCharacter(1)">Duende ⚡</button>
-  <button onclick="selectCharacter(2)">Soldado 🛡️</button>
-  <button onclick="selectCharacter(3)">Mago 🔮</button>
+  <button onclick="selectCharacter(2)">Soldado 🛡️ 🔒</button>
+  <button onclick="selectCharacter(3)">Mago 🔮 🔒</button>
 
   <button onclick="startGame()">Jugar</button>
-  <button onclick="openBox()">Abrir sobre</button>
+  <button onclick="openBox()">Abrir sobre (100 🪙)</button>
 </div>
 
 <div id="hud">
   <p id="score"></p>
 </div>
 
-<canvas id="game" width="400" height="400"></canvas>
+<div id="message"></div>
+
+<canvas id="game"></canvas>
 
 <div id="joystick"></div>
 <div id="ability" onclick="useAbility()">⚡</div>
@@ -94,30 +106,51 @@ canvas {
 let canvas = document.getElementById("game");
 let ctx = canvas.getContext("2d");
 
-let coins = localStorage.getItem("coins") || 0;
+let coins = parseInt(localStorage.getItem("coins")) || 0;
 document.getElementById("coins").innerText = coins;
 
-let player = {x:10,y:10,speed:1,power:1,type:1};
-let bot = {x:5,y:5};
+let unlocked = JSON.parse(localStorage.getItem("unlocked")) || [1];
 
-let cols=20, rows=20;
+let cols=30, rows=30;
+canvas.width = cols*20;
+canvas.height = rows*20;
+
 let grid=[];
 for(let i=0;i<cols;i++){
   grid[i]=[];
   for(let j=0;j<rows;j++) grid[i][j]=0;
 }
 
+let player = {x:10,y:10,speed:0.08,power:1,type:1};
+let bot = {x:5,y:5};
+
 let time=30;
+let lastTime=Date.now();
+let abilityCooldown=0;
+let boxCost=100;
 
-// personajes
+// mensajes
+function showMessage(text){
+  let msg=document.getElementById("message");
+  msg.innerText=text;
+  msg.style.display="block";
+  setTimeout(()=>msg.style.display="none",2000);
+}
+
+// seleccionar personaje
 function selectCharacter(type){
-  player.type = type;
+  if(!unlocked.includes(type)){
+    showMessage("🔒 Bloqueado");
+    return;
+  }
 
-  if(type==1){ player.speed=2; player.power=1;}
-  if(type==2){ player.speed=1; player.power=2;}
-  if(type==3){ player.speed=1; player.power=3;}
+  player.type=type;
 
-  alert("Personaje seleccionado");
+  if(type==1){ player.speed=0.1; player.power=1;}
+  if(type==2){ player.speed=0.06; player.power=2;}
+  if(type==3){ player.speed=0.08; player.power=3;}
+
+  showMessage("Personaje listo");
 }
 
 // iniciar
@@ -132,8 +165,8 @@ function startGame(){
 function paint(p,color,power){
   for(let i=-power;i<=power;i++){
     for(let j=-power;j<=power;j++){
-      let x=p.x+i;
-      let y=p.y+j;
+      let x=Math.floor(p.x+i);
+      let y=Math.floor(p.y+j);
       if(x>=0&&y>=0&&x<cols&&y<rows){
         grid[x][y]=color;
       }
@@ -141,21 +174,32 @@ function paint(p,color,power){
   }
 }
 
-// bot
+// bot inteligente
 function moveBot(){
-  if(Math.random()<0.3){
-    let d=Math.floor(Math.random()*4);
-    if(d==0) bot.x++;
-    if(d==1) bot.x--;
-    if(d==2) bot.y++;
-    if(d==3) bot.y--;
+  let tx=bot.x, ty=bot.y;
+
+  for(let i=-2;i<=2;i++){
+    for(let j=-2;j<=2;j++){
+      let x=bot.x+i;
+      let y=bot.y+j;
+      if(x>=0&&y>=0&&x<cols&&y<rows){
+        if(grid[x][y]!=2){
+          tx=x; ty=y;
+        }
+      }
+    }
   }
+
+  if(tx>bot.x) bot.x+=0.1;
+  if(tx<bot.x) bot.x-=0.1;
+  if(ty>bot.y) bot.y+=0.1;
+  if(ty<bot.y) bot.y-=0.1;
 
   bot.x=Math.max(0,Math.min(cols-1,bot.x));
   bot.y=Math.max(0,Math.min(rows-1,bot.y));
 }
 
-// dibujar
+// draw
 function draw(){
   for(let i=0;i<cols;i++){
     for(let j=0;j<rows;j++){
@@ -166,23 +210,18 @@ function draw(){
     }
   }
 
-  // player visual
-  if(player.type==1){
-    ctx.fillStyle="lime";
-    ctx.fillRect(player.x*20,player.y*20,20,20);
-  }
-  if(player.type==2){
-    ctx.fillStyle="gray";
-    ctx.fillRect(player.x*20,player.y*20,20,20);
-    ctx.fillStyle="white";
-    ctx.fillRect(player.x*20+5,player.y*20+5,10,10);
-  }
-  if(player.type==3){
-    ctx.fillStyle="purple";
-    ctx.beginPath();
-    ctx.arc(player.x*20+10,player.y*20+10,10,0,Math.PI*2);
-    ctx.fill();
-  }
+  let px=player.x*20;
+  let py=player.y*20;
+
+  ctx.fillStyle = player.type==1 ? "lime" : player.type==2 ? "gray" : "purple";
+  ctx.fillRect(px,py,20,20);
+
+  ctx.font="14px Arial";
+  ctx.textAlign="center";
+
+  if(player.type==1) ctx.fillText("👺",px+10,py+15);
+  if(player.type==2) ctx.fillText("🪖",px+10,py+15);
+  if(player.type==3) ctx.fillText("🧙",px+10,py+15);
 
   ctx.fillStyle="red";
   ctx.fillRect(bot.x*20,bot.y*20,20,20);
@@ -203,14 +242,15 @@ function updateScore(){
 
   if(time<=0){
     if(p1>p2){
-      alert("GANASTE!");
-      coins = parseInt(coins)+50;
+      coins+=50;
+      showMessage("🏆 GANASTE +50");
     } else {
-      alert("PERDISTE!");
+      coins+=15;
+      showMessage("💀 PERDISTE +15");
     }
 
     localStorage.setItem("coins",coins);
-    location.reload();
+    setTimeout(()=>location.reload(),1500);
   }
 }
 
@@ -221,39 +261,45 @@ joy.addEventListener("touchmove", e=>{
   let t=e.touches[0];
   let rect=joy.getBoundingClientRect();
 
-  let x=t.clientX-rect.left-50;
-  let y=t.clientY-rect.top-50;
+  let dx=(t.clientX-rect.left-50)/50;
+  let dy=(t.clientY-rect.top-50)/50;
 
-  if(x>10) player.x+=player.speed;
-  if(x<-10) player.x-=player.speed;
-  if(y>10) player.y+=player.speed;
-  if(y<-10) player.y-=player.speed;
+  player.x+=dx*player.speed*2;
+  player.y+=dy*player.speed*2;
 
   player.x=Math.max(0,Math.min(cols-1,player.x));
   player.y=Math.max(0,Math.min(rows-1,player.y));
 });
 
-// habilidades
+// habilidad
 function useAbility(){
+  if(abilityCooldown>0) return;
+
   if(player.type==2){
-    player.x += 3;
+    player.x+=2;
   }
 
   if(player.type==3){
     for(let i=-2;i<=2;i++){
       for(let j=-2;j<=2;j++){
-        let x=player.x+i;
-        let y=player.y+j;
+        let x=Math.floor(player.x+i);
+        let y=Math.floor(player.y+j);
         if(x>=0&&y>=0&&x<cols&&y<rows){
           grid[x][y]=1;
         }
       }
     }
   }
+
+  abilityCooldown=5;
 }
 
 // loop
 function loop(){
+  let now=Date.now();
+  let delta=(now-lastTime)/1000;
+  lastTime=now;
+
   paint(player,1,player.power);
   moveBot();
   paint(bot,2,1);
@@ -261,21 +307,42 @@ function loop(){
   draw();
   updateScore();
 
-  time-=0.05;
+  time-=delta;
+  if(abilityCooldown>0) abilityCooldown-=delta;
 
   requestAnimationFrame(loop);
 }
 
 // sobres
 function openBox(){
+  if(coins<boxCost){
+    showMessage("❌ No tienes monedas");
+    return;
+  }
+
+  coins-=boxCost;
+
   let r=Math.random();
 
   if(r<0.7){
-    let reward=20;
-    coins=parseInt(coins)+reward;
-    alert("Ganaste "+reward+" monedas!");
-  }else{
-    alert("Skin o personaje (próximamente)");
+    let reward=Math.floor(Math.random()*40)+20;
+    coins+=reward;
+    showMessage("💰 +"+reward);
+  }
+  else if(r<0.9){
+    showMessage("🎨 Skin (pronto)");
+  }
+  else{
+    let newChar=Math.floor(Math.random()*2)+2;
+
+    if(!unlocked.includes(newChar)){
+      unlocked.push(newChar);
+      localStorage.setItem("unlocked",JSON.stringify(unlocked));
+      showMessage("🧙 Nuevo personaje!");
+    } else {
+      coins+=30;
+      showMessage("Repetido +30");
+    }
   }
 
   localStorage.setItem("coins",coins);
