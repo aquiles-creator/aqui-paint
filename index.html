@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Juego Paint Arena Online Gratis</title>
+<meta name="description" content="Juego de pintar zonas estilo arena, lucha contra bots y gana monedas">
+
+<style>
+body {
+  margin: 0;
+  background: linear-gradient(135deg, #1e1e2f, #7209b7);
+  color: white;
+  font-family: Arial;
+  text-align: center;
+}
+
+canvas {
+  background: #111;
+  display: block;
+  margin: auto;
+}
+
+.controls {
+  position: fixed;
+  bottom: 10px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+}
+
+.joystick {
+  width: 120px;
+  height: 120px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 50%;
+}
+
+.button {
+  width: 80px;
+  height: 80px;
+  background: #f72585;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu {
+  padding: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="menu" class="menu">
+  <h1>🎨 Paint Arena</h1>
+  <p>Monedas: <span id="coins">0</span></p>
+  <button onclick="startGame()">Jugar</button>
+  <button onclick="openBox()">Abrir sobre</button>
+</div>
+
+<canvas id="game" width="400" height="400" style="display:none;"></canvas>
+
+<div class="controls" id="controls" style="display:none;">
+  <div id="joy" class="joystick"></div>
+  <div id="ult" class="button" onclick="ultimate()">⚡</div>
+</div>
+
+<script>
+let canvas = document.getElementById("game");
+let ctx = canvas.getContext("2d");
+
+let size = 20;
+let grid = [];
+let cols = 20, rows = 20;
+
+for(let i=0;i<cols;i++){
+  grid[i]=[];
+  for(let j=0;j<rows;j++) grid[i][j]=0;
+}
+
+// 🧙 PERSONAJES
+const characters = [
+  {name:"Rápido", speed:2, power:1},
+  {name:"Tanque", speed:1, power:2},
+  {name:"Sniper", speed:1, power:1},
+  {name:"Fantasma", speed:1, power:1},
+  {name:"Explosivo", speed:1, power:2},
+  {name:"Equilibrado", speed:1, power:1}
+];
+
+let player = {...characters[0], x:10, y:10};
+let bot = {x:5, y:5, speed:1, power:1};
+
+let coins = localStorage.getItem("coins") || 0;
+document.getElementById("coins").innerText = coins;
+
+let time = 60;
+
+// 🎮 START
+function startGame(){
+  document.getElementById("menu").style.display="none";
+  canvas.style.display="block";
+  document.getElementById("controls").style.display="flex";
+  gameLoop();
+}
+
+// 🎨 PINTAR
+function paint(p, id){
+  for(let i=-p.power;i<=p.power;i++){
+    for(let j=-p.power;j<=p.power;j++){
+      let x=p.x+i, y=p.y+j;
+      if(x>=0&&y>=0&&x<cols&&y<rows){
+        grid[x][y]=id;
+      }
+    }
+  }
+}
+
+// 🤖 IA
+function botMove(){
+  let dir = Math.floor(Math.random()*4);
+
+  if(dir===0) bot.x++;
+  if(dir===1) bot.x--;
+  if(dir===2) bot.y++;
+  if(dir===3) bot.y--;
+
+  bot.x = Math.max(0,Math.min(cols-1,bot.x));
+  bot.y = Math.max(0,Math.min(rows-1,bot.y));
+}
+
+// 🎮 DIBUJO
+function draw(){
+  for(let i=0;i<cols;i++){
+    for(let j=0;j<rows;j++){
+      if(grid[i][j]===1) ctx.fillStyle="#4cc9f0";
+      else if(grid[i][j]===2) ctx.fillStyle="#f72585";
+      else ctx.fillStyle="#222";
+
+      ctx.fillRect(i*size,j*size,size,size);
+    }
+  }
+
+  ctx.fillStyle="white";
+  ctx.fillRect(player.x*size,player.y*size,size,size);
+
+  ctx.fillStyle="red";
+  ctx.fillRect(bot.x*size,bot.y*size,size,size);
+}
+
+// 🧮 SCORE
+function score(){
+  let p=0,b=0;
+  grid.forEach(col=>{
+    col.forEach(c=>{
+      if(c===1) p++;
+      if(c===2) b++;
+    });
+  });
+
+  return {p,b};
+}
+
+// ⚡ ULTIMATE
+let ultReady=true;
+function ultimate(){
+  if(!ultReady) return;
+
+  player.power=3;
+  ultReady=false;
+
+  setTimeout(()=>player.power=1,2000);
+  setTimeout(()=>ultReady=true,5000);
+}
+
+// 🎮 LOOP
+function gameLoop(){
+  ctx.clearRect(0,0,400,400);
+
+  paint(player,1);
+  paint(bot,2);
+
+  botMove();
+  draw();
+
+  time -= 0.016;
+
+  if(time<=0){
+    let s=score();
+
+    if(s.p > s.b){
+      coins = parseInt(coins)+50;
+      alert("Ganaste! +50 monedas");
+    } else {
+      alert("Perdiste!");
+    }
+
+    localStorage.setItem("coins",coins);
+    location.reload();
+    return;
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 🎮 JOYSTICK
+let joy = document.getElementById("joy");
+
+joy.addEventListener("touchmove", e=>{
+  let t=e.touches[0];
+  let rect=joy.getBoundingClientRect();
+
+  let x = t.clientX - rect.left - 60;
+  let y = t.clientY - rect.top - 60;
+
+  if(x>10) player.x+=player.speed;
+  if(x<-10) player.x-=player.speed;
+  if(y>10) player.y+=player.speed;
+  if(y<-10) player.y-=player.speed;
+
+  player.x=Math.max(0,Math.min(cols-1,player.x));
+  player.y=Math.max(0,Math.min(rows-1,player.y));
+});
+
+// 🎁 SOBRES
+function openBox(){
+  let r=Math.random();
+
+  if(r<0.7){
+    let reward=Math.floor(Math.random()*50)+10;
+    coins=parseInt(coins)+reward;
+    alert("+"+reward+" monedas");
+  } else if(r<0.9){
+    alert("Skin desbloqueada (próximamente)");
+  } else {
+    alert("Nuevo personaje!");
+  }
+
+  localStorage.setItem("coins",
