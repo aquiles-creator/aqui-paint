@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Paint Arena</title>
+<title>Paint Arena PRO</title>
 
 <style>
 body{
@@ -39,14 +39,6 @@ canvas{
   margin:auto;
 }
 
-.skin{
-  margin:10px;
-}
-
-.locked{
-  opacity:0.4;
-}
-
 #joystick{
   position:fixed;
   bottom:20px;
@@ -57,82 +49,77 @@ canvas{
   border-radius:50%;
 }
 
-#message{
+#ability{
   position:fixed;
-  top:10px;
-  left:50%;
-  transform:translateX(-50%);
-  background:#000a;
-  padding:10px 20px;
-  border-radius:10px;
-  display:none;
+  bottom:20px;
+  right:20px;
+  width:80px;
+  height:80px;
+  background:#f72585;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:20px;
 }
+
+.locked{opacity:0.4;}
 </style>
 </head>
 
 <body>
 
-<!-- MENU -->
 <div id="menu">
   <h1>🎨 Paint Arena</h1>
   <button onclick="startGame()">Jugar</button>
   <button onclick="openCharacters()">Personaje</button>
 </div>
 
-<!-- PERSONAJES -->
 <div id="charactersMenu" style="display:none;">
   <h2>Personajes</h2>
   <div id="skinsContainer"></div>
-  <button onclick="backMenu()">Volver</button>
+  <button onclick="backMenu()">⬅ Volver al menú</button>
 </div>
 
-<!-- FIN -->
 <div id="endScreen" style="display:none;">
   <h1 id="endText"></h1>
-  <button onclick="goMenu()">Menú</button>
+  <button onclick="location.reload()">Menú</button>
 </div>
-
-<div id="message"></div>
 
 <canvas id="game"></canvas>
 <div id="joystick"></div>
+<div id="ability" onclick="useAbility()">⚡</div>
 
 <script>
 let canvas=document.getElementById("game");
 let ctx=canvas.getContext("2d");
 
-let cols=25,rows=25;
-canvas.width=cols*20;
-canvas.height=rows*20;
+// 🔥 MAPA MÁS GRANDE
+let cols=40,rows=40;
+canvas.width=cols*15;
+canvas.height=rows*15;
 
 // skins
 let skinsUnlocked=JSON.parse(localStorage.getItem("skins"))||["duende1"];
 let currentSkin=localStorage.getItem("skin")||"duende1";
 
 // jugador
-let player={x:10,y:10,vx:0,vy:0,speed:0.15};
+let player={x:10,y:10,vx:0,vy:0,speed:0.12};
 let bot={x:5,y:5};
 
-// mapa
+// grid
 let grid=[];
 for(let i=0;i<cols;i++){
   grid[i]=[];
   for(let j=0;j<rows;j++) grid[i][j]=0;
 }
 
-let time=30;
+let time=40;
 let playing=false;
 let lastTime=Date.now();
+let abilityCD=0;
 
-// mensaje
-function showMessage(t){
-  let m=document.getElementById("message");
-  m.innerText=t;
-  m.style.display="block";
-  setTimeout(()=>m.style.display="none",2000);
-}
-
-// menú personajes
+// 🎮 MENÚ PERSONAJES
 function openCharacters(){
   document.getElementById("menu").style.display="none";
   document.getElementById("charactersMenu").style.display="flex";
@@ -144,7 +131,6 @@ function openCharacters(){
 
   skins.forEach(s=>{
     let div=document.createElement("div");
-    div.className="skin";
 
     let emoji="❓";
     if(s.includes("duende")) emoji="👺";
@@ -155,12 +141,11 @@ function openCharacters(){
 
     if(!skinsUnlocked.includes(s)){
       div.classList.add("locked");
-      div.innerHTML+="<p>🔒 Bloqueado</p>";
+      div.innerHTML+="🔒";
     }else{
       div.onclick=()=>{
         currentSkin=s;
         localStorage.setItem("skin",s);
-        showMessage("Seleccionado");
       }
     }
 
@@ -173,7 +158,7 @@ function backMenu(){
   document.getElementById("menu").style.display="flex";
 }
 
-// iniciar
+// 🎮 START
 function startGame(){
   document.getElementById("menu").style.display="none";
   canvas.style.display="block";
@@ -182,55 +167,78 @@ function startGame(){
     for(let j=0;j<rows;j++) grid[i][j]=0;
   }
 
-  player.x=10; player.y=10;
-  bot.x=5; bot.y=5;
+  player.x=20; player.y=20;
+  bot.x=10; bot.y=10;
 
-  time=30;
+  time=40;
   playing=true;
   lastTime=Date.now();
 
   loop();
 }
 
-function goMenu(){ location.reload(); }
-
 // pintar
 function paint(p,c){
   let x=Math.floor(p.x);
   let y=Math.floor(p.y);
+
   if(x>=0&&y>=0&&x<cols&&y<rows){
     grid[x][y]=c;
   }
 }
 
-// 🤖 BOT
+// 🤖 BOT INTELIGENTE
 function moveBot(){
-  let tx=Math.random()*cols;
-  let ty=Math.random()*rows;
 
-  let dx=tx-bot.x;
-  let dy=ty-bot.y;
-  let d=Math.hypot(dx,dy);
+  let best=null;
+  let bestScore=-999;
 
-  bot.x+=dx/d*0.05;
-  bot.y+=dy/d*0.05;
+  for(let i=0;i<30;i++){
+    let x=Math.floor(Math.random()*cols);
+    let y=Math.floor(Math.random()*rows);
 
+    let score=0;
+
+    if(grid[x][y]==0) score+=5;
+    if(grid[x][y]==1) score+=3;
+
+    let dist=Math.hypot(x-bot.x,y-bot.y);
+    score-=dist*0.3;
+
+    if(score>bestScore){
+      bestScore=score;
+      best={x,y};
+    }
+  }
+
+  if(best){
+    let dx=best.x-bot.x;
+    let dy=best.y-bot.y;
+    let d=Math.hypot(dx,dy);
+
+    if(d>0){
+      bot.x+=dx/d*0.08;
+      bot.y+=dy/d*0.08;
+    }
+  }
+
+  // límites PERFECTOS
   bot.x=Math.max(0,Math.min(cols-1.01,bot.x));
   bot.y=Math.max(0,Math.min(rows-1.01,bot.y));
 }
 
-// 🎨 PERSONAJE
+// 🎨 PERSONAJES
 function drawCharacter(x,y,skin){
-  let px=x*20;
-  let py=y*20;
+  let px=x*15;
+  let py=y*15;
 
   if(skin.includes("duende")) ctx.fillStyle="green";
   if(skin.includes("soldado")) ctx.fillStyle="blue";
   if(skin.includes("mago")) ctx.fillStyle="purple";
 
-  ctx.fillRect(px,py,20,20);
+  ctx.fillRect(px,py,15,15);
 
-  ctx.font="16px Arial";
+  ctx.font="12px Arial";
   ctx.textAlign="center";
 
   let emoji="";
@@ -242,7 +250,38 @@ function drawCharacter(x,y,skin){
   if(skin=="mago1") emoji="🧙";
   if(skin=="mago2") emoji="👻";
 
-  ctx.fillText(emoji, px+10, py+15);
+  ctx.fillText(emoji, px+7, py+12);
+}
+
+// ⚡ HABILIDADES
+function useAbility(){
+  if(abilityCD>0) return;
+
+  let type=currentSkin;
+
+  // duende: área
+  if(type.includes("duende")){
+    for(let i=-3;i<=3;i++){
+      for(let j=-3;j<=3;j++){
+        paint({x:player.x+i,y:player.y+j},1);
+      }
+    }
+  }
+
+  // soldado: línea
+  if(type.includes("soldado")){
+    for(let i=0;i<10;i++){
+      paint({x:player.x+i,y:player.y},1);
+    }
+  }
+
+  // mago: teletransporte + pintar
+  if(type.includes("mago")){
+    player.x=Math.random()*cols;
+    player.y=Math.random()*rows;
+  }
+
+  abilityCD=17;
 }
 
 // draw
@@ -252,7 +291,7 @@ function draw(){
       if(grid[i][j]==1) ctx.fillStyle="#4cc9f0";
       else if(grid[i][j]==2) ctx.fillStyle="#f72585";
       else ctx.fillStyle="#222";
-      ctx.fillRect(i*20,j*20,20,20);
+      ctx.fillRect(i*15,j*15,15,15);
     }
   }
 
@@ -281,6 +320,7 @@ function loop(){
   draw();
 
   time-=delta;
+  if(abilityCD>0) abilityCD-=delta;
 
   if(time<=0){
     playing=false;
@@ -292,7 +332,7 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
-// 🎮 JOYSTICK
+// joystick
 let joy=document.getElementById("joystick");
 
 joy.addEventListener("touchmove", e=>{
@@ -308,7 +348,6 @@ joy.addEventListener("touchmove", e=>{
   player.vy=dy*player.speed;
 });
 
-// bloquear scroll
 document.addEventListener("touchmove", e=>e.preventDefault(), {passive:false});
 </script>
 
